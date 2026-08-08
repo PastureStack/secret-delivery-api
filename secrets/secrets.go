@@ -1,16 +1,18 @@
+// Modified by PastureStack in 2026: neutral internal package paths.
 package secrets
 
 import (
 	"errors"
+	"strings"
 
 	"encoding/base64"
 	"encoding/json"
 
-	"github.com/rancher/go-rancher/api"
-	"github.com/rancher/go-rancher/client"
-	"github.com/rancher/secrets-api/backends"
-	"github.com/rancher/secrets-api/pkg/aesutils"
-	"github.com/rancher/secrets-api/pkg/rsautils"
+	"github.com/PastureStack/secret-delivery-api/backends"
+	"github.com/PastureStack/secret-delivery-api/compat/controlplane/api"
+	"github.com/PastureStack/secret-delivery-api/compat/controlplane/client"
+	"github.com/PastureStack/secret-delivery-api/pkg/aesutils"
+	"github.com/PastureStack/secret-delivery-api/pkg/rsautils"
 )
 
 func GetEncryptedSecretResource() *EncryptedSecret {
@@ -30,6 +32,9 @@ func NewUnencryptedSecret(context *api.ApiContext) *UnencryptedSecret {
 }
 
 func NewEncryptedSecret(clearSecret *UnencryptedSecret) (*EncryptedSecret, error) {
+	if clearSecret == nil {
+		return nil, errors.New("secret input is required")
+	}
 	secret := &EncryptedSecret{
 		Resource: client.Resource{
 			Type: "encryptedSecret",
@@ -42,6 +47,9 @@ func NewEncryptedSecret(clearSecret *UnencryptedSecret) (*EncryptedSecret, error
 }
 
 func NewRewrappedSecret(encSecret *EncryptedSecret) (*RewrappedSecret, error) {
+	if encSecret == nil {
+		return nil, errors.New("encrypted secret is required")
+	}
 	var err error
 
 	secret := &RewrappedSecret{
@@ -61,6 +69,10 @@ func NewRewrappedSecret(encSecret *EncryptedSecret) (*RewrappedSecret, error) {
 }
 
 func (s *EncryptedSecret) Delete() error {
+	if err := validateKeyName(s.Backend, s.KeyName); err != nil {
+		return err
+	}
+
 	backend, err := backends.New(s.Backend)
 	if err != nil {
 		return err
@@ -70,6 +82,10 @@ func (s *EncryptedSecret) Delete() error {
 }
 
 func (s *EncryptedSecret) seal(clearText string) error {
+	if err := validateKeyName(s.Backend, s.KeyName); err != nil {
+		return err
+	}
+
 	if _, err := base64.StdEncoding.DecodeString(clearText); err != nil {
 		clearText = base64.StdEncoding.EncodeToString([]byte(clearText))
 	}
@@ -115,6 +131,10 @@ func (s *EncryptedSecret) rewrap() (string, error) {
 }
 
 func (s *EncryptedSecret) wrapPlainText() (*EncryptedData, error) {
+	if err := validateKeyName(s.Backend, s.KeyName); err != nil {
+		return nil, err
+	}
+
 	backend, err := backends.New(s.Backend)
 	if err != nil {
 		return nil, err
@@ -134,6 +154,16 @@ func (s *EncryptedSecret) wrapPlainText() (*EncryptedData, error) {
 
 func (s *EncryptedSecret) SetTmpKey(key aesutils.AESKey) {
 	s.tmpKey = key
+}
+
+func validateKeyName(backend, keyName string) error {
+	if backend == "none" {
+		return nil
+	}
+	if keyName == "" || keyName == "." || keyName == ".." || strings.ContainsAny(keyName, `/\\`) {
+		return errors.New("Invalid secret key name")
+	}
+	return nil
 }
 
 func rsaEncryptKey(public *rsautils.RSAPublicKey, aes aesutils.AESKey) (*RSAEncryptedData, error) {

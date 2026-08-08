@@ -1,23 +1,25 @@
-TARGETS := $(shell ls scripts)
+.PHONY: build test validate integration-test package verify-artifact ci clean
 
-.dapper:
-	@echo Downloading dapper
-	@curl -sL https://releases.rancher.com/dapper/latest/dapper-`uname -s`-`uname -m` > .dapper.tmp
-	@@chmod +x .dapper.tmp
-	@./.dapper.tmp -v
-	@mv .dapper.tmp .dapper
+build:
+	./scripts/build
 
-$(TARGETS): .dapper
-	./.dapper $@
+test:
+	./scripts/test
 
-trash: .dapper
-	./.dapper -m bind trash
+validate:
+	./scripts/validate
 
-trash-keep: .dapper
-	./.dapper -m bind trash -k
+integration-test: build
+	./scripts/integration-test
 
-deps: trash
+package: build
+	./scripts/package
 
-.DEFAULT_GOAL := ci
+verify-artifact: package
+	./scripts/verify-artifact
 
-.PHONY: $(TARGETS)
+ci:
+	./scripts/ci
+
+clean:
+	rm -rf bin dist

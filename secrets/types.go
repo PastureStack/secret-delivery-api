@@ -1,8 +1,9 @@
+// Modified by PastureStack in 2026: neutral internal package path.
 package secrets
 
 import (
-	"github.com/rancher/go-rancher/client"
-	"github.com/rancher/secrets-api/pkg/aesutils"
+	"github.com/PastureStack/secret-delivery-api/compat/controlplane/client"
+	"github.com/PastureStack/secret-delivery-api/pkg/aesutils"
 )
 
 type SecretCollection struct {

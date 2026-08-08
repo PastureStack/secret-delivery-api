@@ -1,12 +1,13 @@
+// Modified by PastureStack in 2026: neutral internal package path.
 package localkey
 
 import (
 	"errors"
 	"os"
-	"path"
+	"runtime"
+	"strings"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/rancher/secrets-api/pkg/aesutils"
+	"github.com/PastureStack/secret-delivery-api/pkg/aesutils"
 )
 
 // Client implements the backend client interface
@@ -36,9 +37,32 @@ func NewLocalKey(keyPath string) (*Client, error) {
 }
 
 func (l *Client) loadEncryptionKeyFromPath(keyName string) (aesutils.AESKey, error) {
-	keyFile := path.Join(l.encryptionKeyPath, keyName)
+	if keyName == "" || keyName == "." || keyName == ".." ||
+		strings.ContainsAny(keyName, "/\\\x00\r\n") {
+		return nil, errors.New("invalid local key name")
+	}
+	root, err := os.OpenRoot(l.encryptionKeyPath) // #nosec G304 -- administrator-supplied key directory
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
 
-	return aesutils.NewAESKeyFromFile(keyFile)
+	info, err := root.Lstat(keyName)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, errors.New("local encryption key must be a regular file")
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+		return nil, errors.New("local encryption key permissions must not allow group or other access")
+	}
+
+	keyBytes, err := root.ReadFile(keyName)
+	if err != nil {
+		return nil, err
+	}
+	return aesutils.NewAESKeyFromBytes(keyBytes), nil
 }
 
 // GetEncryptedText localkey Client just returns the clearText
@@ -87,19 +111,13 @@ func (l *Client) Delete(keyName, cipherText string) error {
 }
 
 func testIsDir(keyPath string) (bool, error) {
-	result := false
-
-	file, err := os.Open(keyPath)
+	root, err := os.OpenRoot(keyPath) // #nosec G304 -- keyPath is administrator-supplied process configuration
 	if err != nil {
-		logrus.Error(err)
-		return result, err
+		return false, err
 	}
-	defer file.Close()
-
-	fs, err := file.Stat()
-	if err != nil {
-		return result, err
+	if err := root.Close(); err != nil {
+		return false, err
 	}
 
-	return fs.IsDir(), nil
+	return true, nil
 }

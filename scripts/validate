@@ -1,20 +1,23 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+# Modified by PastureStack in 2026: current Go vet and formatting checks.
+set -euo pipefail
 
-cd $(dirname $0)/..
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+"${repo_root}/scripts/verify-go-toolchain"
 
-echo Running validation
+(
+    cd "${repo_root}"
+    go mod verify
+    go mod tidy -diff
+    CGO_ENABLED=0 go vet -mod=readonly ./...
+)
 
-PACKAGES=". $(find -name '*.go' | xargs -I{} dirname {} |  cut -f2 -d/ | sort -u | grep -Ev '(^\.$|.git|.trash-cache|vendor|bin)' | sed -e 's!^!./!' -e 's!$!/...!')"
-
-echo Running: go vet
-go vet ${PACKAGES}
-echo Running: golint
-for i in ${PACKAGES}; do
-    if [ -n "$(golint $i | grep -v 'should have comment.*or be unexported' | tee /dev/stderr)" ]; then
-        failed=true
-    fi
-done
-test -z "$failed"
-echo Running: go fmt
-test -z "$(go fmt ${PACKAGES} | tee /dev/stderr)"
+mapfile -t unformatted < <(find "${repo_root}" \
+    -path "${repo_root}/.git" -prune -o \
+    -path "${repo_root}/bin" -prune -o \
+    -path "${repo_root}/dist" -prune -o \
+    -name '*.go' -type f -print | xargs gofmt -l)
+if (( ${#unformatted[@]} > 0 )); then
+    printf 'Unformatted Go source:\n%s\n' "${unformatted[@]}" >&2
+    exit 1
+fi

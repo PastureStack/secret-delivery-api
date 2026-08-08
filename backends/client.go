@@ -1,11 +1,12 @@
+// Modified by PastureStack in 2026: neutral internal package paths.
 package backends
 
 import (
 	"errors"
 
-	"github.com/rancher/secrets-api/backends/localkey"
-	"github.com/rancher/secrets-api/backends/none"
-	"github.com/rancher/secrets-api/backends/vault"
+	"github.com/PastureStack/secret-delivery-api/backends/localkey"
+	"github.com/PastureStack/secret-delivery-api/backends/none"
+	"github.com/PastureStack/secret-delivery-api/backends/vault"
 )
 
 var runtimeConfigs *Configs
@@ -21,20 +22,27 @@ type EncryptorClient interface {
 
 // New returns an encrytion client of a specific type
 func New(name string) (EncryptorClient, error) {
+	if runtimeConfigs == nil {
+		return nil, errors.New("backend configuration is not initialized")
+	}
+
 	switch name {
 	case "none":
-		return &none.Client{}, nil
+		if runtimeConfigs.AllowInsecureNoneBackend {
+			return &none.Client{}, nil
+		}
+		return nil, errors.New("insecure none backend is disabled")
 	case "localkey":
 		if runtimeConfigs.EncryptionKeyPath != "" {
 			return localkey.NewLocalKey(runtimeConfigs.EncryptionKeyPath)
 		}
-		return nil, errors.New("No backend configured")
+		return nil, errors.New("local key backend is not configured")
 	case "vault":
 		if runtimeConfigs.VaultURL != "" && runtimeConfigs.VaultToken != "" {
 			return vault.NewClient(runtimeConfigs.VaultURL, runtimeConfigs.VaultToken)
 		}
-		return nil, errors.New("Backend not configured")
+		return nil, errors.New("Vault backend is not configured")
 	default:
-		return nil, errors.New("Unknown Encryption backend")
+		return nil, errors.New("unknown encryption backend")
 	}
 }

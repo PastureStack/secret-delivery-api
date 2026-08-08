@@ -1,18 +1,85 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+# Modified by PastureStack in 2026: deterministic flat GitHub Release asset.
+set -euo pipefail
 
-ARCH=${ARCH:?"ARCH not set"}
-SUFFIX=""
-[ "${ARCH}" != "amd64" ] && SUFFIX="_${ARCH}"
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+source "${repo_root}/scripts/version"
 
-source $(dirname $0)/version
+binary="${repo_root}/bin/secret-delivery-api"
+if [[ ! -x "${binary}" ]]; then
+    "${repo_root}/scripts/build"
+fi
 
-cd $(dirname $0)/../package
+version="${VERSION#v}"
+arch="${ARCH:-amd64}"
+artifact="secret-delivery-api-${version}-linux-${arch}.tar.xz"
+source_date_epoch="${SOURCE_DATE_EPOCH:-0}"
+package_root="$(mktemp -d)"
+cleanup()
+{
+    rm -rf "${package_root}"
+}
+trap cleanup EXIT
 
-TAG=${TAG:-${VERSION}${SUFFIX}}
-REPO=${REPO:-rancher}
+mkdir -p "${repo_root}/dist/artifacts"
+install -m 0755 "${binary}" "${package_root}/secret-delivery-api"
+install -m 0644 "${repo_root}/THIRD-PARTY-NOTICES.md" \
+    "${package_root}/secret-delivery-api-THIRD-PARTY-NOTICES.md"
 
-cp ../bin/secrets-api .
-docker build -t ${REPO}/secrets-api:${TAG} .
+"${repo_root}/scripts/verify-go-toolchain"
+(
+    cd "${repo_root}"
+    go mod verify
+    go mod vendor -o "${package_root}/module-vendor"
+)
 
-echo Built ${REPO}/secrets-api:${TAG}
+cat >"${package_root}/secret-delivery-api-SOURCES.txt" <<EOF
+PastureStack source: https://github.com/PastureStack/secret-delivery-api
+Release source commit: $(git -C "${repo_root}" rev-parse HEAD)
+Upstream source: https://github.com/rancher/secrets-api
+Preserved upstream boundary: 46d8cb7c0cf2ecf07447aadbfaa39c11bd4b5fbb
+Dependency graph: go.mod and go.sum at the release source commit
+go.mod SHA-256: $(sha256sum "${repo_root}/go.mod" | cut -d' ' -f1)
+go.sum SHA-256: $(sha256sum "${repo_root}/go.sum" | cut -d' ' -f1)
+EOF
+printf '\n' >>"${package_root}/secret-delivery-api-SOURCES.txt"
+cat "${repo_root}/ORIGIN.md" >>"${package_root}/secret-delivery-api-SOURCES.txt"
+
+licenses="${package_root}/secret-delivery-api-LICENSES.txt"
+: >"${licenses}"
+append_license()
+{
+    local name="$1"
+    local path="$2"
+    printf '===== %s =====\n\n' "${name}" >>"${licenses}"
+    cat "${repo_root}/${path}" >>"${licenses}"
+    printf '\n\n' >>"${licenses}"
+}
+
+append_license 'Secret Delivery API — Apache-2.0' LICENSE
+append_license 'Embedded compatibility source — Apache-2.0' compat/controlplane/LICENSE
+
+while IFS= read -r -d '' license_path; do
+    relative_path="${license_path#${package_root}/module-vendor/}"
+    printf '===== Go module source: %s =====\n\n' "${relative_path}" >>"${licenses}"
+    cat "${license_path}" >>"${licenses}"
+    printf '\n\n' >>"${licenses}"
+done < <(find "${package_root}/module-vendor" -type f \
+    \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) \
+    -print0 | sort -z)
+
+rm -f "${repo_root}/dist/artifacts/${artifact}"
+XZ_OPT=-9e tar \
+    --sort=name \
+    --mtime="@${source_date_epoch}" \
+    --owner=0 \
+    --group=0 \
+    --numeric-owner \
+    -C "${package_root}" \
+    -cJf "${repo_root}/dist/artifacts/${artifact}" \
+    secret-delivery-api \
+    secret-delivery-api-LICENSES.txt \
+    secret-delivery-api-SOURCES.txt \
+    secret-delivery-api-THIRD-PARTY-NOTICES.md
+
+sha256sum "${repo_root}/dist/artifacts/${artifact}"

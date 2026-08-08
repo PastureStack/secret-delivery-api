@@ -1,10 +1,11 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+# Modified by PastureStack in 2026: shared local and GitHub-hosted release gate.
+set -euo pipefail
 
-cd $(dirname $0)
-
-./build
-./test
-./validate
-./integration-test
-./package
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+"${repo_root}/scripts/test"
+"${repo_root}/scripts/validate"
+"${repo_root}/scripts/build"
+"${repo_root}/scripts/integration-test"
+"${repo_root}/scripts/package"
+"${repo_root}/scripts/verify-artifact"

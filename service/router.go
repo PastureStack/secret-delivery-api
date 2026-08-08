@@ -1,3 +1,4 @@
+// Modified by PastureStack in 2026: neutral internal package path and wording.
 package service
 
 import (
@@ -5,14 +6,12 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/PastureStack/secret-delivery-api/compat/controlplane/api"
+	"github.com/PastureStack/secret-delivery-api/compat/controlplane/client"
+	"github.com/PastureStack/secret-delivery-api/secrets"
 	"github.com/gorilla/mux"
-	"github.com/rancher/go-rancher/api"
-	"github.com/rancher/go-rancher/client"
-	"github.com/rancher/secrets-api/secrets"
+	"github.com/sirupsen/logrus"
 )
-
-var schemas *client.Schemas
 
 // HandleError is a wrapper that handles response codes and error messages
 func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (int, error)) http.Handler {
@@ -20,6 +19,7 @@ func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (
 		if code, err := t(rw, req); err != nil {
 			logrus.Errorf("Error in request, code : %d: %s", code, err)
 			apiContext := api.GetApiContext(req)
+			rw.Header().Set("Content-Type", "application/json")
 			rw.WriteHeader(code)
 
 			apiContext.Write(&errObj{
@@ -27,15 +27,15 @@ func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (
 					Type: "error",
 				},
 				Status:  strconv.Itoa(code),
-				Message: err.Error(),
+				Message: safeErrorMessage(code),
 			})
 		}
 	}))
 }
 
-// NewRouter creates the router for the application and wires up Rancher API spec schema
+// NewRouter creates the router and wires up the preserved control-plane API schema.
 func NewRouter() *mux.Router {
-	schemas = &client.Schemas{}
+	schemas := &client.Schemas{}
 	f := HandleError
 
 	schemas.AddType("apiVersion", client.Resource{})
@@ -79,8 +79,9 @@ func NewRouter() *mux.Router {
 	}
 
 	router := mux.NewRouter().StrictSlash(false)
+	router.Use(securityHeaders)
 
-	//Rancher Routes
+	// Preserved control-plane compatibility routes.
 	router.Methods("GET").Path("/v1-secrets").Handler(api.VersionHandler(schemas, "v1-secrets"))
 	router.Methods("GET").Path("/v1-secrets/").Handler(api.VersionHandler(schemas, "v1-secrets"))
 
@@ -137,4 +138,26 @@ func NewRouter() *mux.Router {
 	})
 
 	return router
+}
+
+func safeErrorMessage(code int) string {
+	switch code {
+	case http.StatusBadRequest:
+		return "Invalid request"
+	case http.StatusNotFound:
+		return "Not found"
+	default:
+		if message := http.StatusText(code); message != "" {
+			return message
+		}
+		return "Request failed"
+	}
+}
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		next.ServeHTTP(w, r)
+	})
 }

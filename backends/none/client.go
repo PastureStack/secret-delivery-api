@@ -1,12 +1,14 @@
+// Modified by PastureStack in 2026: normalized for the current Go toolchain.
 package none
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 )
 
-//Client is the stuct implementing the backend client interface
+// Client is the stuct implementing the backend client interface
 type Client struct{}
 
 // GetEncryptedText None Client just returns the clearText
@@ -22,14 +24,22 @@ func (n *Client) GetClearText(keyName, cipherText string) (string, error) {
 
 // Sign signs the message
 func (n *Client) Sign(keyName, clearText string) (string, error) {
-	hashBytes := md5.Sum([]byte(clearText))
+	hashBytes := sha256.Sum256([]byte(clearText))
 	return hex.EncodeToString(hashBytes[:]), nil
 }
 
 // VerifySignature verifies the signature created by the key
 func (n *Client) VerifySignature(keyName, signature, message string) (bool, error) {
-	hashBytes := md5.Sum([]byte(message))
-	return signature == hex.EncodeToString(hashBytes[:]), nil
+	signatureBytes, err := hex.DecodeString(signature)
+	if err != nil {
+		return false, err
+	}
+	if len(signatureBytes) != sha256.Size {
+		return false, nil
+	}
+
+	hashBytes := sha256.Sum256([]byte(message))
+	return subtle.ConstantTimeCompare(signatureBytes, hashBytes[:]) == 1, nil
 }
 
 // Delete No Op, not stored.

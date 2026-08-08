@@ -1,28 +1,33 @@
-secrets-api
-========
+# PastureStack Secret Delivery API
 
-A microservice that does micro things.
+Secret Delivery API encrypts, signs, rewraps, and purges secret payloads for the preserved control-plane contract. It supports local AES-GCM keys and the inherited Vault transit integration.
 
-## Building
+PastureStack is an independent community effort to preserve, audit, and modernize the Rancher 1.6 ecosystem. It is not affiliated with or endorsed by Rancher Labs or SUSE.
 
-`make`
+**Upstream:** [`rancher/secrets-api`](https://github.com/rancher/secrets-api). This GitHub fork preserves upstream history, authorship, dates, tags, licenses, and bundled dependency notices; PastureStack maintenance is consolidated into one commit after the preserved upstream boundary.
 
+## Project status
 
-## Running
+The `v0.3.0` maintenance layer is based on the preserved upstream `v0.2.2` boundary. It uses Go modules and the exact Go 1.26.5 toolchain, deterministic Release packaging, bounded JSON requests, HTTP resource timeouts, scoped Vault storage operations, neutral product naming, race tests, a 70% critical-path coverage gate, and a loopback local-key API integration test. Production deployment remains disabled until the matching Server integration has passed in an isolated VM.
 
-`./bin/secrets-api`
+The `none` backend is an insecure compatibility fixture and is disabled by default. It can be enabled only with `--allow-insecure-none-backend` or `ALLOW_INSECURE_NONE_BACKEND=true` for an explicitly reviewed legacy migration. The supported Server path uses the `localkey` backend on the loopback interface.
 
-## License
-Copyright (c) 2014-2016 [Rancher Labs, Inc.](http://rancher.com)
+## Build and test
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+From a Linux host with Go 1.26.5, `bash`, `tar`, `xz`, `curl`, and network access to the Go module proxy or an already populated module cache:
 
-[http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
+```sh
+make test
+make build
+make integration-test
+make package
+make ci
+```
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+For the reviewed compatibility release, set `VERSION_OVERRIDE=v0.3.0` and `SOURCE_DATE_EPOCH=0`. Packaging produces `secret-delivery-api-0.3.0-linux-amd64.tar.xz`. PastureStack Server downloads the flat asset from its matching GitHub Release, verifies its SHA-256 digest, and installs the executable under the preserved `secrets-api` compatibility name. Operators do not need to host an artifact mirror.
+
+See [COMPATIBILITY.md](COMPATIBILITY.md), [SECURITY.md](SECURITY.md), [ORIGIN.md](ORIGIN.md), and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+## License and attribution
+
+The inherited project remains licensed under [Apache License 2.0](LICENSE). Copyright and attribution for inherited work, the embedded compatibility source, and third-party modules remain with their respective authors and contributors. PastureStack contributors claim authorship only for their own changes.

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# PastureStack deterministic artifact verification.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+source "${repo_root}/scripts/version"
+version="${VERSION#v}"
+arch="${ARCH:-amd64}"
+artifact="${repo_root}/dist/artifacts/secret-delivery-api-${version}-linux-${arch}.tar.xz"
+
+if [[ ! -f "${artifact}" ]]; then
+    "${repo_root}/scripts/package"
+fi
+
+work_root="$(mktemp -d)"
+cleanup()
+{
+    rm -rf "${work_root}"
+}
+trap cleanup EXIT
+
+tar -xJf "${artifact}" -C "${work_root}"
+test -x "${work_root}/secret-delivery-api"
+test -f "${work_root}/secret-delivery-api-LICENSES.txt"
+test -f "${work_root}/secret-delivery-api-SOURCES.txt"
+test -f "${work_root}/secret-delivery-api-THIRD-PARTY-NOTICES.md"
+test "$(tar -tJf "${artifact}" | wc -l)" = 4
+grep -F 'Apache License' "${work_root}/secret-delivery-api-LICENSES.txt" >/dev/null
+grep -F 'Mozilla Public License' "${work_root}/secret-delivery-api-LICENSES.txt" >/dev/null
+grep -F 'Preserved upstream boundary: 46d8cb7c0cf2ecf07447aadbfaa39c11bd4b5fbb' \
+    "${work_root}/secret-delivery-api-SOURCES.txt" >/dev/null
+
+test "$(sha256sum "${repo_root}/bin/secret-delivery-api" | cut -d' ' -f1)" = \
+     "$(sha256sum "${work_root}/secret-delivery-api" | cut -d' ' -f1)"
+"${work_root}/secret-delivery-api" --version | grep -F "${VERSION}"
+if ldd "${work_root}/secret-delivery-api" >/dev/null 2>&1; then
+    echo 'The executable is dynamically linked.' >&2
+    exit 1
+fi
+
+printf 'Verified %s\n' "$(basename "${artifact}")"

@@ -1,15 +1,21 @@
+// Modified by PastureStack in 2026: neutral internal package path and safe errors.
 package service
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/url"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/rancher/go-rancher/api"
-	"github.com/rancher/go-rancher/client"
-	"github.com/rancher/secrets-api/secrets"
+	"github.com/PastureStack/secret-delivery-api/compat/controlplane/api"
+	"github.com/PastureStack/secret-delivery-api/compat/controlplane/client"
+	"github.com/PastureStack/secret-delivery-api/secrets"
+	"github.com/sirupsen/logrus"
 )
+
+const maxRequestBodyBytes int64 = 1 << 20
 
 type errObj struct {
 	client.Resource
@@ -45,11 +51,9 @@ func CreateSecret(w http.ResponseWriter, r *http.Request) (int, error) {
 
 	sec := secrets.NewUnencryptedSecret(apiContext)
 
-	jsonDecoder := json.NewDecoder(r.Body)
-
-	err := jsonDecoder.Decode(&sec)
+	err := decodeJSONBody(w, r, sec)
 	if err != nil {
-		logrus.Errorf("Could not decode: %s because %s", r.Body, err)
+		logrus.Errorf("Could not decode request body: %s", err)
 		return http.StatusBadRequest, err
 	}
 
@@ -70,9 +74,7 @@ func BulkCreateSecret(w http.ResponseWriter, r *http.Request) (int, error) {
 	apiContext := api.GetApiContext(r)
 	bulkSecret := secrets.NewBulkSecretInput()
 
-	jsonDecoder := json.NewDecoder(r.Body)
-
-	err := jsonDecoder.Decode(&bulkSecret)
+	err := decodeJSONBody(w, r, bulkSecret)
 	if err != nil {
 		return http.StatusBadRequest, err
 	}
@@ -93,11 +95,9 @@ func RewrapSecret(w http.ResponseWriter, r *http.Request) (int, error) {
 
 	sec := secrets.GetEncryptedSecretResource()
 
-	jsonDecoder := json.NewDecoder(r.Body)
-
-	err := jsonDecoder.Decode(&sec)
+	err := decodeJSONBody(w, r, sec)
 	if err != nil {
-		logrus.Errorf("Could not decode: %s because %s", r.Body, err)
+		logrus.Errorf("Could not decode request body: %s", err)
 		return http.StatusBadRequest, err
 	}
 
@@ -116,11 +116,9 @@ func BulkRewrapSecret(w http.ResponseWriter, r *http.Request) (int, error) {
 	apiContext := api.GetApiContext(r)
 	bulkSecret := secrets.GetBulkEncryptedSecretResource()
 
-	jsonDecoder := json.NewDecoder(r.Body)
-
-	err := jsonDecoder.Decode(&bulkSecret)
+	err := decodeJSONBody(w, r, bulkSecret)
 	if err != nil {
-		logrus.Errorf("Could not decode: %s because %s", r.Body, err)
+		logrus.Errorf("Could not decode request body: %s", err)
 		return http.StatusBadRequest, err
 	}
 
@@ -138,11 +136,9 @@ func BulkRewrapSecret(w http.ResponseWriter, r *http.Request) (int, error) {
 func DeleteSecret(w http.ResponseWriter, r *http.Request) (int, error) {
 	sec := secrets.GetEncryptedSecretResource()
 
-	jsonDecoder := json.NewDecoder(r.Body)
-
-	err := jsonDecoder.Decode(&sec)
+	err := decodeJSONBody(w, r, sec)
 	if err != nil {
-		logrus.Errorf("Could not decode: %s because %s", r.Body, err)
+		logrus.Errorf("Could not decode request body: %s", err)
 		return http.StatusBadRequest, err
 	}
 
@@ -152,6 +148,7 @@ func DeleteSecret(w http.ResponseWriter, r *http.Request) (int, error) {
 		return http.StatusBadRequest, err
 	}
 
+	w.WriteHeader(http.StatusNoContent)
 	return http.StatusNoContent, nil
 }
 
@@ -159,11 +156,9 @@ func DeleteSecret(w http.ResponseWriter, r *http.Request) (int, error) {
 func BulkDeleteSecret(w http.ResponseWriter, r *http.Request) (int, error) {
 	bulkSecret := secrets.GetBulkEncryptedSecretResource()
 
-	jsonDecoder := json.NewDecoder(r.Body)
-
-	err := jsonDecoder.Decode(&bulkSecret)
+	err := decodeJSONBody(w, r, bulkSecret)
 	if err != nil {
-		logrus.Errorf("Could not decode: %s because %s", r.Body, err)
+		logrus.Errorf("Could not decode request body: %s", err)
 		return http.StatusBadRequest, err
 	}
 
@@ -173,10 +168,43 @@ func BulkDeleteSecret(w http.ResponseWriter, r *http.Request) (int, error) {
 		return http.StatusBadRequest, err
 	}
 
+	w.WriteHeader(http.StatusNoContent)
 	return http.StatusNoContent, nil
 }
 
-//URLEncoded encodes the urls so that spaces are allowed in resource names
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, destination interface{}) error {
+	if r == nil || r.Body == nil {
+		return errors.New("request body is required")
+	}
+	if destination == nil {
+		return errors.New("JSON destination is required")
+	}
+
+	limited := http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+	body, err := io.ReadAll(limited)
+	if err != nil {
+		return err
+	}
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 || bytes.Equal(body, []byte("null")) {
+		return errors.New("request body must contain a JSON object")
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+	var extra interface{}
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errors.New("request body must contain exactly one JSON value")
+		}
+		return err
+	}
+	return nil
+}
+
+// URLEncoded encodes the urls so that spaces are allowed in resource names
 func URLEncoded(str string) string {
 	u, err := url.Parse(str)
 	if err != nil {

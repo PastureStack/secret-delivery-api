@@ -1,3 +1,4 @@
+// Modified by PastureStack in 2026: reject malformed and non-RSA keys safely.
 package rsautils
 
 import (
@@ -8,8 +9,6 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
-
-	"github.com/Sirupsen/logrus"
 )
 
 // RSAPublicKey a struct to hold an RSA Public Key
@@ -20,7 +19,10 @@ type RSAPublicKey struct {
 // PublicKeyFromString returns an RSA public key object from a string
 func PublicKeyFromString(pKey string) (*RSAPublicKey, error) {
 	key, err := loadRSAPublicKey(pKey)
-	return &RSAPublicKey{key}, err
+	if err != nil {
+		return nil, err
+	}
+	return &RSAPublicKey{key}, nil
 }
 
 // Encrypt uses RSA Public key to encrypt data
@@ -32,18 +34,23 @@ func (pk *RSAPublicKey) Encrypt(text string) (string, error) {
 }
 
 func loadRSAPublicKey(key string) (*rsa.PublicKey, error) {
-	block, val := pem.Decode([]byte(key))
+	block, _ := pem.Decode([]byte(key))
 	if block == nil {
-		// This is supposed to be a public key so we can log
-		logrus.Debugf(string(val))
 		return nil, errors.New("Could not decode public key block")
 	}
-	logrus.Debugf("Public Key Block Type: %s", block.Type)
 
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	parsedKey, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
 		return nil, err
 	}
 
-	return pub.(*rsa.PublicKey), nil
+	pub, ok := parsedKey.(*rsa.PublicKey)
+	if !ok {
+		return nil, errors.New("Decoded public key is not RSA")
+	}
+	if pub.N.BitLen() < 2048 {
+		return nil, errors.New("RSA public key must be at least 2048 bits")
+	}
+
+	return pub, nil
 }

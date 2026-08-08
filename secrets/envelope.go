@@ -1,8 +1,9 @@
+// Modified by PastureStack in 2026: neutral internal package paths.
 package secrets
 
 import (
-	"github.com/rancher/secrets-api/pkg/aesutils"
-	"github.com/rancher/secrets-api/pkg/rsautils"
+	"github.com/PastureStack/secret-delivery-api/pkg/aesutils"
+	"github.com/PastureStack/secret-delivery-api/pkg/rsautils"
 )
 
 func createMessageEnvelope(rsaKey, message string, tmpKey aesutils.AESKey) (*EncryptedData, error) {

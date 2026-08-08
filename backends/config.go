@@ -1,9 +1,12 @@
 package backends
 
+import "errors"
+
 type Configs struct {
-	VaultToken        string
-	VaultURL          string
-	EncryptionKeyPath string
+	VaultToken               string
+	VaultURL                 string
+	EncryptionKeyPath        string
+	AllowInsecureNoneBackend bool
 }
 
 func NewConfig() *Configs {
@@ -11,6 +14,10 @@ func NewConfig() *Configs {
 }
 
 func SetBackendConfigs(config *Configs) error {
-	runtimeConfigs = config
+	if config == nil {
+		return errors.New("backend configuration is required")
+	}
+	copy := *config
+	runtimeConfigs = &copy
 	return nil
 }

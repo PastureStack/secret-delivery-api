@@ -1,62 +1,61 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Modified by PastureStack in 2026: loopback local-key API smoke test.
+set -euo pipefail
 
-set -e 
-
-cd $(dirname $0)/..
-
-echo "B374A26A71490437AA024E4FADD5B49" > /etc/ssl/private/test_key
-echo "A374A26A71490437AA024E4FADD5B49" > /etc/ssl/private/alt_test_key
-
-export VAULT_ROOT_TOKEN_ID="testing"
-
-#export VAULT_TOKEN=${VAULT_ROOT_TOKEN_ID}
-#export VAULT_ADDR=http://127.0.0.1:8200
-
-/usr/bin/vault server -dev -dev-root-token-id=${VAULT_ROOT_TOKEN_ID} &
-sleep 3
-
-/usr/bin/vault server -dev -dev-root-token-id=${VAULT_ROOT_TOKEN_ID} -dev-listen-address 0.0.0.0:18200 &
-sleep 3
-
-wire_vault()
-{
-    export VAULT_ADDR="${1}"
-    export VAULT_TOKEN=${VAULT_ROOT_TOKEN_ID}
-
-    /usr/bin/vault mount transit
-    /usr/bin/vault mounts
-    /usr/bin/vault write -f transit/keys/rancher
-    /usr/bin/vault read transit/keys/rancher
-}
-
-get_token()
-{
-    export VAULT_ADDR="${1}"
-    export VAULT_TOKEN=${VAULT_ROOT_TOKEN_ID}
-
-    if [ "${2}" = "true" ]; then
-        export OPTS=-metadata="storage_dir=/secret/rancher"
-    fi
-
-    echo $(/usr/bin/vault token-create ${OPTS} -format=json| jq -r '.auth.client_token')
-}
-
-# Normal ephemeral storage
-wire_vault "http://127.0.0.1:8200"
-TOKEN1=$(get_token "http://127.0.0.1:8200")
-echo ./bin/secrets-api -d server --enc-key-path /etc/ssl/private --vault-url http://127.0.0.1:8200 --vault-token ${TOKEN1}
-./bin/secrets-api -d server --enc-key-path /etc/ssl/private --vault-url http://127.0.0.1:8200 --vault-token ${TOKEN1} &
-
-# Makes use of vault storage
-wire_vault "http://127.0.0.1:18200"
-TOKEN2=$(get_token "http://127.0.0.1:18200" "true")
-echo ./bin/secrets-api -d server --enc-key-path /etc/ssl/private --vault-url http://127.0.0.1:18200 --vault-token ${TOKEN2} --listen-address 127.0.0.1:18181
-./bin/secrets-api -d server --enc-key-path /etc/ssl/private --vault-url http://127.0.0.1:18200 --vault-token ${TOKEN2} --listen-address 127.0.0.1:18181 &
-
-cd integration
-python --version
-
-find -depth -name __pycache__ -o -name "*.pyc" -exec rm -rf {} \;
-if [ -z "$NO_TEST" ]; then
-    tox "$@"
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+binary="${repo_root}/bin/secret-delivery-api"
+if [[ ! -x "${binary}" ]]; then
+    "${repo_root}/scripts/build"
 fi
+
+work_root="$(mktemp -d)"
+pid=''
+cleanup()
+{
+    if [[ -n "${pid}" ]]; then
+        kill "${pid}" 2>/dev/null || true
+        wait "${pid}" 2>/dev/null || true
+    fi
+    rm -rf "${work_root}"
+}
+trap cleanup EXIT
+
+dd if=/dev/urandom of="${work_root}/smoke-key" bs=32 count=1 status=none
+chmod 0600 "${work_root}/smoke-key"
+
+listen_address="127.0.0.1:18181"
+"${binary}" server \
+    --enc-key-path "${work_root}" \
+    --listen-address "${listen_address}" \
+    >"${work_root}/service.log" 2>&1 &
+pid=$!
+
+for _ in $(seq 1 50); do
+    if curl --silent --fail "http://${listen_address}/v1-secrets" >/dev/null; then
+        break
+    fi
+    if ! kill -0 "${pid}" 2>/dev/null; then
+        cat "${work_root}/service.log" >&2
+        exit 1
+    fi
+    sleep 0.1
+done
+
+response="$(curl --silent --show-error --fail \
+    -H 'Content-Type: application/json' \
+    -d '{"type":"secretInput","name":"smoke","clearText":"PastureStack smoke secret","backend":"localkey","keyName":"smoke-key"}' \
+    "http://${listen_address}/v1-secrets/secrets/create")"
+
+RESPONSE="${response}" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["RESPONSE"])
+assert payload["type"] == "encryptedSecret"
+assert payload["backend"] == "localkey"
+assert payload["keyName"] == "smoke-key"
+assert payload.get("cipherText")
+assert payload.get("signature")
+assert "clearText" not in payload
+assert "PastureStack smoke secret" not in json.dumps(payload)
+PY

@@ -1,3 +1,4 @@
+// Modified by PastureStack in 2026: normalized for the current Go toolchain.
 package rsautils
 
 import (
@@ -8,7 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
-	"io/ioutil"
+	"os"
 )
 
 // Decryptor handles decrypting messages
@@ -21,7 +22,7 @@ type rsaDecryptor struct {
 	key            *rsa.PrivateKey
 }
 
-//NewRSADecryptorKeyFromFile returns an RSA decryptor
+// NewRSADecryptorKeyFromFile returns an RSA decryptor
 func NewRSADecryptorKeyFromFile(privateKeyPath string) (Decryptor, error) {
 	key, err := loadPrivateKeyFromFile(privateKeyPath)
 	if err != nil {
@@ -46,28 +47,43 @@ func NewRSADecryptorKeyFromString(privateKey string) (Decryptor, error) {
 	}, nil
 }
 
-//Decrypt implments the decryptor interface
+// Decrypt implments the decryptor interface
 func (r rsaDecryptor) Decrypt(cipherText string) ([]byte, error) {
 	return rsaDecrypt(r.key, cipherText)
 }
 
 func loadPrivateKeyFromFile(keyPath string) (*rsa.PrivateKey, error) {
-	keyData, err := ioutil.ReadFile(keyPath)
+	// The path is an administrator-supplied process configuration value, not request data.
+	keyData, err := os.ReadFile(keyPath) // #nosec G304 -- reading the explicitly configured private-key file is the intended operation
 	if err != nil {
 		return nil, err
 	}
 
 	block, _ := pem.Decode(keyData)
 	if block == nil {
-		return nil, errors.New("Could not decode private key. Is it PEM format?")
+		return nil, errors.New("could not decode private key; is it PEM format?")
 	}
 
-	return x509.ParsePKCS1PrivateKey(block.Bytes)
+	return parsePrivateKey(block.Bytes)
 }
 
 func loadPrivateKeyFromString(keyString string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(keyString))
-	return x509.ParsePKCS1PrivateKey(block.Bytes)
+	if block == nil {
+		return nil, errors.New("could not decode private key; is it PEM format?")
+	}
+	return parsePrivateKey(block.Bytes)
+}
+
+func parsePrivateKey(der []byte) (*rsa.PrivateKey, error) {
+	key, err := x509.ParsePKCS1PrivateKey(der)
+	if err != nil {
+		return nil, err
+	}
+	if key.N.BitLen() < 2048 {
+		return nil, errors.New("RSA private key must be at least 2048 bits")
+	}
+	return key, nil
 }
 
 func rsaDecrypt(priv *rsa.PrivateKey, cipherText string) ([]byte, error) {

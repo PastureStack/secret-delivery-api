@@ -1,11 +1,11 @@
+// Modified by PastureStack in 2026: validate signatures before slicing.
 package aesutils
 
 import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-
-	"github.com/Sirupsen/logrus"
+	"errors"
 )
 
 // Sign implements the interface
@@ -49,19 +49,16 @@ func VerifySignature(aesKey AESKey, signature, message string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if len(byteSignature) != 13+sha256.Size || byteSignature[12] != ':' {
+		return false, errors.New("Invalid signature format")
+	}
 
 	copy(nonce, byteSignature[:12])
-
-	logrus.Debugf("Sent Signature in Bytes: %s", byteSignature)
-	logrus.Debugf("Nonce: %s", nonce)
-	logrus.Debugf("Sent Signed Cipher Text: %s", byteSignature[13:])
 
 	signedMsg, err := sign(key, append(nonce, []byte(":"+message)...))
 	if err != nil {
 		return false, err
 	}
-
-	logrus.Debugf("Generated sig from deciphered text: %s", signedMsg)
 
 	return hmac.Equal(byteSignature[13:], signedMsg), nil
 }

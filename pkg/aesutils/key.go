@@ -1,9 +1,7 @@
 package aesutils
 
 import (
-	"io/ioutil"
-
-	"github.com/Sirupsen/logrus"
+	"os"
 )
 
 type AESKey interface {
@@ -34,15 +32,14 @@ func (kf *keyFile) Key() ([]byte, error) {
 }
 
 func (kf *keyFile) readPrivateKey() ([]byte, error) {
-	keyData, err := ioutil.ReadFile(kf.pathName)
+	keyData, err := os.ReadFile(kf.pathName)
 	if err != nil {
 		return []byte{}, err
 	}
 
-	logrus.Debugf("Key: %s", string(keyData))
 	return keyData, nil
 }
 
 func (rk *randomKey) Key() ([]byte, error) {
-	return rk.key, nil
+	return append([]byte(nil), rk.key...), nil
 }

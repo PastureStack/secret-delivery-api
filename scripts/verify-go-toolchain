@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# PastureStack exact Go toolchain gate.
+set -euo pipefail
+
+expected='go1.26.5'
+actual="$(go env GOVERSION)"
+if [[ "${actual}" != "${expected}" ]]; then
+    printf 'Go toolchain mismatch: expected %s, got %s\n' "${expected}" "${actual}" >&2
+    exit 1
+fi

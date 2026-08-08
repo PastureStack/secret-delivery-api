@@ -1,3 +1,4 @@
+// Modified by PastureStack in 2026: neutral internal package paths.
 package secrets
 
 import (
@@ -5,8 +6,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/rancher/secrets-api/pkg/aesutils"
-	"github.com/rancher/secrets-api/pkg/rsautils"
+	"github.com/PastureStack/secret-delivery-api/backends"
+	"github.com/PastureStack/secret-delivery-api/pkg/aesutils"
+	"github.com/PastureStack/secret-delivery-api/pkg/rsautils"
 )
 
 var (
@@ -17,6 +19,57 @@ func TestGetRSAPublicKey(t *testing.T) {
 	_, err := rsautils.PublicKeyFromString(publicKey())
 	if err != nil {
 		t.Error(err)
+	}
+}
+
+func TestEncryptedSecretRejectsPathLikeKeyNames(t *testing.T) {
+	invalidNames := []string{"", ".", "..", "../outside", "/absolute", `folder\\key`}
+	for _, keyName := range invalidNames {
+		secret := GetUnencryptedSecretResource()
+		secret.Backend = "localkey"
+		secret.KeyName = keyName
+		secret.ClearText = "test"
+		if _, err := NewEncryptedSecret(secret); err == nil {
+			t.Errorf("expected key name %q to be rejected", keyName)
+		}
+	}
+}
+
+func TestNoneBackendKeepsEmptyCompatibilityKeyName(t *testing.T) {
+	enableNoneBackend(t)
+	secret := GetUnencryptedSecretResource()
+	secret.Backend = "none"
+	secret.ClearText = "test"
+	if _, err := NewEncryptedSecret(secret); err != nil {
+		t.Fatalf("none compatibility backend rejected empty key name: %v", err)
+	}
+}
+
+func TestSecretConstructorsRejectNilInputs(t *testing.T) {
+	if _, err := NewEncryptedSecret(nil); err == nil {
+		t.Fatal("expected nil secret input error")
+	}
+	if _, err := NewRewrappedSecret(nil); err == nil {
+		t.Fatal("expected nil encrypted secret error")
+	}
+	if _, err := NewBulkEncryptedSecret(nil); err == nil {
+		t.Fatal("expected nil bulk input error")
+	}
+	if _, err := NewBulkRewrappedSecret(nil); err == nil {
+		t.Fatal("expected nil bulk encrypted input error")
+	}
+}
+
+func TestBulkOperationsRejectNullItems(t *testing.T) {
+	if _, err := NewBulkEncryptedSecret(&BulkSecretInput{Data: []*UnencryptedSecret{nil}}); err == nil {
+		t.Fatal("expected null clear-secret item error")
+	}
+	bulk := &BulkEncryptedSecret{Data: []*EncryptedSecret{nil}}
+	if err := bulk.Delete(); err == nil {
+		t.Fatal("expected null encrypted-secret item error")
+	}
+	if _, err := NewBulkRewrappedSecret(bulk); err == nil {
+		t.Fatal("expected null encrypted-secret rewrap error")
 	}
 }
 
@@ -63,6 +116,7 @@ FNH/hPpMSf5p6Gl4Ipl12s5U6FVYQlmuVlFgV8iUEKsSkMWdrvvx5X38RlgqQqvU
 }
 
 func TestRewrapMessage(t *testing.T) {
+	enableNoneBackend(t)
 	encData := &EncryptedData{}
 	secret := GetUnencryptedSecretResource()
 	secret.Backend = "none"
@@ -124,4 +178,13 @@ func TestRewrapMessage(t *testing.T) {
 		t.Errorf("String: %s is not the expected %s", clearTextPlain, initialText)
 	}
 
+}
+
+func enableNoneBackend(t *testing.T) {
+	t.Helper()
+	config := backends.NewConfig()
+	config.AllowInsecureNoneBackend = true
+	if err := backends.SetBackendConfigs(config); err != nil {
+		t.Fatal(err)
+	}
 }

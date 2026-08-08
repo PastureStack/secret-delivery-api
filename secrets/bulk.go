@@ -1,9 +1,12 @@
+// Modified by PastureStack in 2026: neutral internal package path.
 package secrets
 
 import (
-	"github.com/Sirupsen/logrus"
-	"github.com/rancher/go-rancher/client"
-	"github.com/rancher/secrets-api/pkg/aesutils"
+	"errors"
+
+	"github.com/PastureStack/secret-delivery-api/compat/controlplane/client"
+	"github.com/PastureStack/secret-delivery-api/pkg/aesutils"
+	"github.com/sirupsen/logrus"
 )
 
 func NewBulkSecretInput() *BulkSecretInput {
@@ -21,6 +24,9 @@ func GetBulkEncryptedSecretResource() *BulkEncryptedSecret {
 }
 
 func NewBulkEncryptedSecret(secretInput *BulkSecretInput) (*BulkEncryptedSecret, error) {
+	if secretInput == nil {
+		return nil, errors.New("bulk secret input is required")
+	}
 	bsi := &BulkEncryptedSecret{
 		Resource: client.Resource{
 			Type: "bulkEncryptedSecret",
@@ -32,6 +38,9 @@ func NewBulkEncryptedSecret(secretInput *BulkSecretInput) (*BulkEncryptedSecret,
 }
 
 func NewBulkRewrappedSecret(secrets *BulkEncryptedSecret) (*BulkRewrappedSecret, error) {
+	if secrets == nil {
+		return nil, errors.New("bulk encrypted secret is required")
+	}
 	brs := &BulkRewrappedSecret{
 		Resource: client.Resource{
 			Type: "bulkRewrappedSecret",
@@ -42,7 +51,13 @@ func NewBulkRewrappedSecret(secrets *BulkEncryptedSecret) (*BulkRewrappedSecret,
 }
 
 func (bes *BulkEncryptedSecret) Delete() error {
+	if bes == nil {
+		return errors.New("bulk encrypted secret is required")
+	}
 	for _, secret := range bes.Data {
+		if secret == nil {
+			return errors.New("bulk encrypted secret contains a null item")
+		}
 		err := secret.Delete()
 		if err != nil {
 			logrus.Error(err)
@@ -60,6 +75,9 @@ func (s *BulkRewrappedSecret) rewrap(secrets *BulkEncryptedSecret) error {
 	}
 
 	for _, secret := range secrets.Data {
+		if secret == nil {
+			return errors.New("bulk encrypted secret contains a null item")
+		}
 		secret.SetTmpKey(tmpKey)
 		secret.RewrapKey = secrets.RewrapKey
 
@@ -76,6 +94,9 @@ func (s *BulkRewrappedSecret) rewrap(secrets *BulkEncryptedSecret) error {
 
 func (bes *BulkEncryptedSecret) seal(clearData []*UnencryptedSecret) error {
 	for _, clear := range clearData {
+		if clear == nil {
+			return errors.New("bulk secret input contains a null item")
+		}
 		secret, err := NewEncryptedSecret(clear)
 		if err != nil {
 			logrus.Error(err)

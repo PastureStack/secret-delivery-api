@@ -7,6 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+)
+
+const (
+	aes256KeyLength = 32
+	aesGCMAlgorithm = "aes256-gcm"
 )
 
 type AESSecret struct {
@@ -20,15 +26,19 @@ func NewAESKeyFromFile(keyPath string) (AESKey, error) {
 }
 
 func NewRandomAESKey(length int) (AESKey, error) {
-	var err error
-	if k, err := randomNonce(32); err == nil {
-		return &randomKey{key: k}, nil
+	if length != aes256KeyLength {
+		return nil, fmt.Errorf("AES-256 keys must be %d bytes", aes256KeyLength)
 	}
-	return nil, err
+
+	k, err := randomNonce(length)
+	if err != nil {
+		return nil, err
+	}
+	return &randomKey{key: k}, nil
 }
 
 func NewAESKeyFromBytes(key []byte) AESKey {
-	return &randomKey{key: key}
+	return &randomKey{key: append([]byte(nil), key...)}
 }
 
 func InitBlock(aesKey AESKey) (cipher.Block, error) {
@@ -51,8 +61,15 @@ func InitBlock(aesKey AESKey) (cipher.Block, error) {
 
 // GetEncryptedText localkey Client just returns the cipherText
 func GetEncryptedText(key AESKey, clearText string, algorithm string) (string, error) {
+	if algorithm != aesGCMAlgorithm {
+		return "", fmt.Errorf("unsupported encryption algorithm %q", algorithm)
+	}
+	if err := validateAES256Key(key); err != nil {
+		return "", err
+	}
+
 	secret := &AESSecret{
-		Algorithm: "aes256-gcm",
+		Algorithm: aesGCMAlgorithm,
 	}
 
 	cipherBlock, err := InitBlock(key)
@@ -90,6 +107,12 @@ func GetClearText(key AESKey, secretBlob string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if secret.Algorithm != aesGCMAlgorithm {
+		return "", fmt.Errorf("unsupported encryption algorithm %q", secret.Algorithm)
+	}
+	if err := validateAES256Key(key); err != nil {
+		return "", err
+	}
 
 	cipherBlock, err := InitBlock(key)
 	if err != nil {
@@ -100,6 +123,12 @@ func GetClearText(key AESKey, secretBlob string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(secret.Nonce) != gcm.NonceSize() {
+		return "", fmt.Errorf("invalid GCM nonce length: got %d, want %d", len(secret.Nonce), gcm.NonceSize())
+	}
+	if len(secret.CipherText) < gcm.Overhead() {
+		return "", errors.New("invalid GCM ciphertext")
+	}
 
 	plainText, err := gcm.Open(nil, secret.Nonce, secret.CipherText, nil)
 	if err != nil {
@@ -107,6 +136,20 @@ func GetClearText(key AESKey, secretBlob string) (string, error) {
 	}
 
 	return string(plainText), nil
+}
+
+func validateAES256Key(key AESKey) error {
+	if key == nil {
+		return errors.New("AES key is required")
+	}
+	material, err := key.Key()
+	if err != nil {
+		return err
+	}
+	if len(material) != aes256KeyLength {
+		return fmt.Errorf("AES-256 keys must be %d bytes", aes256KeyLength)
+	}
+	return nil
 }
 
 func randomNonce(byteLength int) ([]byte, error) {

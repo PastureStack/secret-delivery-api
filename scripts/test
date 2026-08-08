@@ -1,11 +1,44 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+# Modified by PastureStack in 2026: module verification, unit, race, and coverage tests.
+set -euo pipefail
 
-cd $(dirname $0)/..
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+work_root="$(mktemp -d)"
+cleanup()
+{
+    rm -rf "${work_root}"
+}
+trap cleanup EXIT
 
-echo Running tests
+"${repo_root}/scripts/verify-go-toolchain"
 
-PACKAGES=". $(find -name '*.go' | xargs -I{} dirname {} |  cut -f2 -d/ | sort -u | grep -Ev '(^\.$|.git|.trash-cache|vendor|bin)' | sed -e 's!^!./!' -e 's!$!/...!')"
+(
+    cd "${repo_root}"
+    go mod verify
+    CGO_ENABLED=1 go test \
+        -mod=readonly \
+        -count=1 \
+        -race \
+        ./...
 
-[ "${ARCH}" == "amd64" ] && RACE=-race
-go test ${RACE} -cover -tags=test ${PACKAGES}
+    critical_cover_packages='./backends/...,./command,./pkg/...,./secrets,./service'
+    go test \
+        -mod=readonly \
+        -count=1 \
+        -covermode=atomic \
+        -coverpkg="${critical_cover_packages}" \
+        -coverprofile="${work_root}/coverage.out" \
+        ./backends/... ./command ./pkg/... ./secrets ./service
+
+    coverage="$(go tool cover -func="${work_root}/coverage.out" \
+        | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')"
+    minimum_coverage='70.0'
+    if ! awk -v actual="${coverage}" -v minimum="${minimum_coverage}" \
+        'BEGIN { exit !(actual + 0 >= minimum + 0) }'; then
+        printf 'Critical-path coverage %s%% is below the required %s%%.\n' \
+            "${coverage}" "${minimum_coverage}" >&2
+        exit 1
+    fi
+    printf 'Critical-path coverage: %s%% (required: %s%%)\n' \
+        "${coverage}" "${minimum_coverage}"
+)
