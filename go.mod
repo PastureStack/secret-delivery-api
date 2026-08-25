@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/context v1.1.2
 	github.com/gorilla/mux v1.8.1
 	github.com/hashicorp/vault/api v1.23.0
-	github.com/sirupsen/logrus v1.10.1
+	github.com/sirupsen/logrus v1.10.2
 	github.com/urfave/cli v1.22.17
 )
 
