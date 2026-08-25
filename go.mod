@@ -2,13 +2,13 @@ module github.com/PastureStack/secret-delivery-api
 
 go 1.26.0
 
-toolchain go1.26.5
+toolchain go1.27.0
 
 require (
 	github.com/gorilla/context v1.1.2
 	github.com/gorilla/mux v1.8.1
 	github.com/hashicorp/vault/api v1.23.0
-	github.com/sirupsen/logrus v1.9.4
+	github.com/sirupsen/logrus v1.10.1
 	github.com/urfave/cli v1.22.17
 )
 
@@ -29,8 +29,8 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 )

@@ -4,7 +4,7 @@ The single PastureStack maintenance commit after upstream `v0.2.2`:
 
 - changes product-owned package paths, executable identity, documentation, and build output to PastureStack naming;
 - retains old protocol and dependency names only inside documented compatibility and legal boundaries;
-- replaces obsolete Dapper, Drone, Ubuntu 16.04, Python 2, and GOPATH build plumbing with a Go module workflow fixed to Go 1.26.5;
+- replaces obsolete Dapper, Drone, Ubuntu 16.04, Python 2, and GOPATH build plumbing with a Go module workflow fixed to Go 1.27.0;
 - replaces the unversioned dependency source tree with `go.mod` and `go.sum`, while retaining only the Apache-2.0 compatibility API, schema, and resource types required by the wire contract;
 - removes the unused generated HTTP client, WebSocket dependency, full-body debug logging, and browser HTML writer that loaded unpinned external scripts;
 - adds deterministic Release packaging and complete license/source pointers;
