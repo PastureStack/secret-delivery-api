@@ -8,7 +8,7 @@ PastureStack is an independent community effort to preserve, audit, and moderniz
 
 ## Project status
 
-The `v0.3.2` release candidate is based on the preserved upstream `v0.2.2` boundary. It uses Go modules and the exact Go 1.27.2 toolchain, deterministic Release packaging, bounded JSON requests, HTTP resource timeouts, scoped Vault storage operations, neutral product naming, race tests, a 70% critical-path coverage gate, and a loopback local-key API integration test. Published tags and assets remain immutable. Production deployment remains disabled until the matching Server integration has passed in an isolated VM.
+The `v0.3.2` release candidate is based on the preserved upstream `v0.2.2` boundary. It uses Go modules and the exact Go 1.27.2 toolchain, x/net 0.60.0, deterministic Release packaging, bounded JSON requests, HTTP resource timeouts, scoped Vault storage operations, neutral product naming, race tests, a 70% critical-path coverage gate, and a loopback local-key API integration test. Published tags and assets remain immutable. Production deployment remains disabled until the matching Server integration has passed in an isolated VM.
 
 The `none` backend is an insecure compatibility fixture and is disabled by default. It can be enabled only with `--allow-insecure-none-backend` or `ALLOW_INSECURE_NONE_BACKEND=true` for an explicitly reviewed legacy migration. The supported Server path uses the `localkey` backend on the loopback interface.
 
