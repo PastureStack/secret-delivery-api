@@ -8,13 +8,13 @@ PastureStack is an independent community effort to preserve, audit, and moderniz
 
 ## Project status
 
-The `v0.3.0` maintenance layer is based on the preserved upstream `v0.2.2` boundary. It uses Go modules and the exact Go 1.27.0 toolchain, deterministic Release packaging, bounded JSON requests, HTTP resource timeouts, scoped Vault storage operations, neutral product naming, race tests, a 70% critical-path coverage gate, and a loopback local-key API integration test. Production deployment remains disabled until the matching Server integration has passed in an isolated VM.
+The `v0.3.2` release candidate is based on the preserved upstream `v0.2.2` boundary. It uses Go modules and the exact Go 1.27.2 toolchain, deterministic Release packaging, bounded JSON requests, HTTP resource timeouts, scoped Vault storage operations, neutral product naming, race tests, a 70% critical-path coverage gate, and a loopback local-key API integration test. Published tags and assets remain immutable. Production deployment remains disabled until the matching Server integration has passed in an isolated VM.
 
 The `none` backend is an insecure compatibility fixture and is disabled by default. It can be enabled only with `--allow-insecure-none-backend` or `ALLOW_INSECURE_NONE_BACKEND=true` for an explicitly reviewed legacy migration. The supported Server path uses the `localkey` backend on the loopback interface.
 
 ## Build and test
 
-From a Linux host with Go 1.27.0, `bash`, `tar`, `xz`, `curl`, and network access to the Go module proxy or an already populated module cache:
+From a Linux host with Go 1.27.2, `bash`, `tar`, `xz`, `curl`, and network access to the Go module proxy or an already populated module cache:
 
 ```sh
 make test
@@ -24,7 +24,7 @@ make package
 make ci
 ```
 
-For the reviewed compatibility release, set `VERSION_OVERRIDE=v0.3.0` and `SOURCE_DATE_EPOCH=0`. Packaging produces `secret-delivery-api-0.3.0-linux-amd64.tar.xz`. PastureStack Server downloads the flat asset from its matching GitHub Release, verifies its SHA-256 digest, and installs the executable under the preserved `secrets-api` compatibility name. Operators do not need to host an artifact mirror.
+For the reviewed compatibility release, set `VERSION_OVERRIDE=v0.3.2` and `SOURCE_DATE_EPOCH=0`. Packaging produces `secret-delivery-api-0.3.2-linux-amd64.tar.xz`. PastureStack Server downloads the flat asset from its matching GitHub Release, verifies its new SHA-256 digest, and installs the executable under the preserved `secrets-api` compatibility name. Operators do not need to host an artifact mirror.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md), [SECURITY.md](SECURITY.md), [ORIGIN.md](ORIGIN.md), and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
