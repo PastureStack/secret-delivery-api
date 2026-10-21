@@ -29,6 +29,28 @@ jobs:
 
       - name: Run release gate
         env:
-          VERSION_OVERRIDE: v0.0.0-ci
+          VERSION_OVERRIDE: v0.3.3
           SOURCE_DATE_EPOCH: "0"
         run: ./scripts/ci
+
+      - name: Record the verified release product
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact=dist/artifacts/secret-delivery-api-0.3.3-linux-amd64.tar.xz
+          test -f "$artifact"
+          mkdir -p release-evidence
+          git rev-parse HEAD > release-evidence/source-revision.txt
+          git rev-parse 'HEAD^{tree}' > release-evidence/source-tree.txt
+          go version -m bin/secret-delivery-api > release-evidence/go-version.txt
+          sha256sum bin/secret-delivery-api "$artifact" > release-evidence/SHA256SUMS
+          cp "$artifact" release-evidence/
+
+      - name: Upload the verified release product
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: secret-delivery-api-release-${{ github.sha }}
+          path: release-evidence/
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
